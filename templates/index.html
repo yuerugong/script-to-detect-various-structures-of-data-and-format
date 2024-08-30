@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Web Scraper</title>
+</head>
+<body>
+    <h1>Enter a Website to Scrape</h1>
+    <form action="/scrape" method="post">
+        <input type="text" name="url" placeholder="Enter website URL" required>
+        <div id="class-input" style="display: none;">
+            <input type="text" name="class_name" placeholder="Enter class name if required">
+        </div>
+        <input type="submit" value="Scrape">
+    </form>
+
+    <script>
+        function toggleClassInput(show) {
+            document.getElementById('class-input').style.display = show ? 'block' : 'none';
+        }
+    </script>
+</body>
+</html>
