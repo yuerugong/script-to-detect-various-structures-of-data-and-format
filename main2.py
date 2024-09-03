@@ -128,18 +128,18 @@ def scrape_with_pagination(driver, url, max_pages=10):
         if data:
             print(f"Data extracted from page {pages_scraped + 1}")
 
-            # 如果是第一页的数据，将其保存到first_page_data
+            # If it is data from the first page, save it to first_page_data
             if pages_scraped == 0:
                 first_page_data = data
-                all_data.extend(data)  # 仅在第一页时添加数据
+                all_data.extend(data)  # Add data only on the first page
             else:
-                # 检查当前页面的数据与第一页的数据的相似度
+                # Check how similar the data on the current page is to the data on the first page
                 common_data_count = sum(1 for item in data if item in first_page_data)
                 if common_data_count / len(first_page_data) > 0.7:
                     print("Detected similar content as the first page. Exiting.")
                     break
                 else:
-                    all_data.extend(data)  # 仅在内容不相似时添加数据
+                    all_data.extend(data)  # Add data only when the content is not similar
 
         current_page_source = driver.page_source
         if current_page_source == last_page_source:
@@ -329,4 +329,3 @@ def scrape_with_fallback(url, class_name=None):
 
     data = asyncio.run(httpx_async_scrape(url))
     return data
-

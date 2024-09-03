@@ -14,6 +14,29 @@
         <input type="submit" value="Scrape">
     </form>
 
+    <h2>Existing Tables</h2>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>URL</th>
+                <th>Table Name</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for table in tables_info %}
+            <tr>
+                <td>{{ table.url }}</td>
+                <td>{{ table.table_name }}</td>
+                <td>
+                    <a href="{{ url_for('view_table', table_name=table.table_name) }}">View Data</a> |
+                    <a href="{{ url_for('delete_table', table_name=table.table_name) }}" onclick="return confirm('Are you sure you want to delete this table?')">Delete</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
     <script>
         function toggleClassInput(show) {
             document.getElementById('class-input').style.display = show ? 'block' : 'none';
