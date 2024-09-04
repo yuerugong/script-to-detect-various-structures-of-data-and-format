@@ -14,6 +14,18 @@
         <input type="submit" value="Scrape">
     </form>
 
+    {% if prompt_existing_data %}
+    <p>The URL has been scraped within the last week (Last collected: {{ last_collected }}). What would you like to do?</p>
+    <a href="{{ url_for('download_latest', table_name=table_name) }}">Download Latest Data</a>
+    <form action="/scrape" method="post">
+        <input type="hidden" name="url" value="{{ request.form['url'] }}">
+        <input type="hidden" name="class_name" value="{{ request.form.get('class_name') }}">
+        <input type="hidden" name="rescrape" value="true">
+        <input type="submit" value="Rescrape Data">
+    </form>
+    {% endif %}
+
+
     <h2>Existing Tables</h2>
     <table border="1">
         <thead>
