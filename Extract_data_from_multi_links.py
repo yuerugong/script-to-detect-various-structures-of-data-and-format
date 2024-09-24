@@ -31,9 +31,18 @@ def extract_from_anchor_tags(soup, base_url):
     for a in soup.find_all('a'):
         href = a.get('data-uw-original-href') or a.get('href')
         if href and a.get_text(strip=True):  # Ensure it's a valid link with text
-            full_url = urljoin(base_url, href)
 
-            # Add the name and the (potentially full) link to the data
+            print(f"Original href: {href}")
+
+            if href.startswith(('http://', 'https://')):
+                # href -> absolute url
+                full_url = href
+            else:
+                # href -> relative url
+                full_url = urljoin(base_url, href)
+
+            print(f"Full URL: {full_url}")
+
             data.append({
                 'name': a.get_text(strip=True),
                 'link': full_url
@@ -44,7 +53,7 @@ def extract_from_anchor_tags(soup, base_url):
 
 def extract_bio_and_image(person_url):
     """
-    Extracts the bio and image from an individual profile page.
+    Extracts the bio and image from an individual profile page, generalized to handle multiple webpage structures.
     """
     try:
         print(f"Fetching data for: {person_url}", flush=True)
@@ -54,19 +63,34 @@ def extract_bio_and_image(person_url):
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Extract the bio (from <p> tags)
+        # Extract the bio (from all <p> tags, fallback if no specific container is available)
         bio = ""
         bio_paragraphs = soup.find_all('p')
         if bio_paragraphs:
+            # Join the text from all <p> tags to form the full bio
             bio = "\n".join([p.get_text(strip=True) for p in bio_paragraphs])
 
         # Extract the image (from <img> tags)
         image = ""
         img_tag = soup.find('img')
-        if img_tag and img_tag.get('src'):
-            image = img_tag['src']
+        if img_tag:
+            # First, try to get the 'data-srcset' attribute (the attribute you're interested in)
+            srcset = img_tag.get('data-srcset')
+            if srcset:
+                # Extract all URLs and widths
+                srcset_urls = [entry.split(" ")[0] for entry in srcset.split(",")]
+                # Select the largest image (the last one in the list)
+                image = srcset_urls[-1]
+            else:
+                # Fallback to 'data-src' or 'src'
+                image = img_tag.get('data-src') or img_tag.get('src')
+
             # If image src is relative, convert to absolute
-            image = urljoin(person_url, image)
+            if image:
+                image = urljoin(person_url, image)
+
+        print(f"Bio: {bio}")
+        print(f"Image: {image}")
 
         return bio, image
 
@@ -85,4 +109,6 @@ def filter_content(data):
         if clean_item not in seen:
             filtered_data.append(item)
             seen.add(clean_item)
+        else:
+            print(f"Duplicate detected, skipping: {clean_item}")
     return filtered_data
