@@ -7,9 +7,9 @@ from urllib.parse import urlparse, urljoin
 def extract_data_with_details(driver, soup, base_url):
     print("Extracting detailed data from the page...", flush=True)
 
-    # First, remove all <header> tags and their content
-    for header in soup.find_all('header'):
-        header.decompose()  # Remove <header> and all its content
+    # remove all <header> and <aside> tags and their content
+    for element in soup.find_all(['header', 'aside', 'footer']):
+        element.decompose()  # Remove <header> and <aside> and all their content
 
     # List to store extracted data
     extracted_data = []
@@ -38,29 +38,65 @@ def extract_data_with_details(driver, soup, base_url):
 
 def extract_from_anchor_tags(soup, base_url):
     data = []
+    seen_links = set()  # To store unique links
 
     # Iterate over all 'a' tags
     for a in soup.find_all('a'):
         href = a.get('data-uw-original-href') or a.get('href')
-        if href and a.get_text(strip=True):  # Ensure it's a valid link with text
-
-            print(f"Original href: {href}")
-
+        if href:  # Ensure it's a valid link
+            # Make the URL absolute if it's relative
             if href.startswith(('http://', 'https://')):
-                # href -> absolute url
                 full_url = href
             else:
-                # href -> relative url
                 full_url = urljoin(base_url, href)
 
-            print(f"Full URL: {full_url}")
+            # Skip if the link has already been processed
+            if full_url in seen_links:
+                continue
 
+            # Check if the link has a title attribute
+            link_text = a.get('title')  # Prefer using the title attribute
+
+            # If no title, fall back to the anchor text
+            if not link_text:
+                link_text = a.get_text(strip=True)
+
+            # Skip common "Read More" type links or empty text links
+            if not link_text or link_text.lower() in ["read more", "click here", "learn more", "report this?",
+                                                      "register", "terms and conditions", "privacy policy",
+                                                      "find out more"]:
+                continue
+
+            # Print the extracted URL and text
+            print(f"Extracted URL: {full_url}, Text: {link_text}")
+
+            # Store the link and its associated text
             data.append({
-                'name': a.get_text(strip=True),
+                'name': link_text,
                 'link': full_url
             })
 
+            # Mark this URL as seen
+            seen_links.add(full_url)
+
     return data
+
+
+def extract_relevant_text(anchor_tag):
+    """
+    Extracts the most relevant and meaningful text from an anchor tag.
+    If the <a> tag itself does not have visible text, it tries to extract from nearby elements.
+    """
+    link_text = anchor_tag.get_text(strip=True)
+
+    # If <a> tag text is empty, try to find text from nearby <h1>, <h2>, <h3>, <p>, or <span> tags
+    if not link_text:
+        for sibling in anchor_tag.find_all_previous(['h1', 'h2', 'h3', 'h4'], limit=1):
+            link_text = sibling.get_text(strip=True)
+            if link_text:
+                break
+
+    return link_text
 
 
 def extract_bio_and_image(person_url):
