@@ -37,14 +37,27 @@ def scrape_with_fallback(url, class_name=None):
 
 
 def selenium_scrape(url, class_name=None):
+    email = "davidmoreno@72dragons.com"
+    password = "DrDragon72!"
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
     try:
         driver = webdriver.Chrome(executable_path="/Users/gongyueru/Downloads/chromedriver-mac-arm64 2/chromedriver", options=options)
+
         driver.get(url)
+
+        if is_login_page(driver):
+            print("Detected login page. Attempting to log in...")
+
+            login(driver, email, password)
+
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+        print(f"Accessing URL: {url}")
+        driver.get(url)
+
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-        # Pass the driver and the page to extract_data for further processing
         data = extract_data(driver, url, class_name)
 
         driver.quit()
@@ -54,12 +67,42 @@ def selenium_scrape(url, class_name=None):
         return None
 
 
+def is_login_page(driver):
+    try:
+        # 检测用户名或email字段
+        email_field = driver.find_element(By.ID, "Email")
+        password_field = driver.find_element(By.ID, "Password")
+        return email_field is not None and password_field is not None
+    except Exception as e:
+        return False
+
+
+def login(driver, email, password):
+    try:
+        # enter email and password
+        email_field = driver.find_element(By.ID, "Email")
+        password_field = driver.find_element(By.ID, "Password")
+        submit_button = driver.find_element(By.CSS_SELECTOR, 'button[type="submit"]')
+
+        email_field.send_keys(email)
+        password_field.send_keys(password)
+
+        submit_button.click()
+
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+    except Exception as e:
+        print(f"Error during login: {e}")
+
+
 def requests_beautifulsoup_scrape(url):
     try:
         response = requests.get(url)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        all_data = scrape_with_pagination_generic(soup, fetch_next_page_requests)
+
+        # Make sure to pass the correct fetch_page_content function
+        all_data = scrape_with_pagination_generic(soup, fetch_next_page_requests, fetch_next_page_requests)
         return all_data
     except Exception as e:
         print(f"Failed with Requests + BeautifulSoup: {e}")
@@ -72,8 +115,13 @@ def playwright_scrape(url):
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
             page.goto(url)
+
             soup = BeautifulSoup(page.content(), 'html.parser')
-            all_data = scrape_with_pagination_generic(soup, lambda _: fetch_next_page_playwright(page))
+
+            # Make sure to pass the correct fetch_page_content function
+            all_data = scrape_with_pagination_generic(soup, lambda _: fetch_next_page_playwright(page),
+                                                      fetch_next_page_playwright)
+
             browser.close()
             return all_data
     except Exception as e:
@@ -94,46 +142,38 @@ async def httpx_async_scrape(url):
                     return None
                 return await fetch_next_page_httpx(client, next_button['href'])
 
-            all_data = await scrape_with_pagination_generic(soup, fetch_next_page_wrapper)
+            # Pass both the get_next_page_url and fetch_page_content functions
+            all_data = await scrape_with_pagination_generic(soup, fetch_next_page_wrapper, fetch_next_page_httpx)
             return all_data
     except Exception as e:
         print(f"Failed with httpx + Asyncio + BeautifulSoup: {e}")
         return None
 
 
+
 ### Paging processing ###
 
-def scrape_with_pagination(driver, url, class_name=None):
-    # Added improvements to handle pagination more robustly
+def scrape_with_pagination(driver, url, class_name, base_url):
+    # Handling pagination to scrape multiple pages
     all_data = []
-    visited_urls = set()
+    visited_content_hashes = set()
     pages_scraped = 0
 
     while pages_scraped < 10:
         soup = BeautifulSoup(driver.page_source, 'html.parser')
-        format_type = detect_format(soup)
+        current_page_hash = hashlib.md5(soup.get_text().encode('utf-8')).hexdigest()
 
-        # Switch between different format types
-        if format_type == 'table':
-            data = Extract_data_from_url.extract_table_data(soup)
-        elif format_type in ['list', 'div']:
-            data = Extract_data_from_list.extract_list_data(soup, class_name)
-        else:
-            print("Unknown format")
-            data = None
+        if current_page_hash in visited_content_hashes:
+            print("Already visited this page content. Exiting to prevent a loop.")
+            break
 
-        # Handle data extraction and similarity check
-        if data:
-            if pages_scraped == 0:
-                first_page_data = data
-            else:
-                common_data_count = sum(1 for item in data if item in first_page_data)
-                if common_data_count / len(first_page_data) > 0.7:
-                    print("Detected similar content as the first page. Exiting.")
-                    break
-            all_data.extend(data)
+        visited_content_hashes.add(current_page_hash)
 
-        # Try to find and click the "Next" button
+        # Extract data from the current page
+        page_data = Extract_data_from_multi_links.extract_data_with_details(driver, soup, base_url)
+        if page_data:
+            all_data.extend(page_data)
+
         if not find_and_click_next_button(driver):
             print("No further 'Next Page' buttons found.")
             break
@@ -144,6 +184,7 @@ def scrape_with_pagination(driver, url, class_name=None):
     return all_data
 
 
+
 def scrape_with_pagination_generic(soup, get_next_page_url, fetch_page_content, max_pages=1):
     all_data = []
     initial_content = soup.get_text()
@@ -152,7 +193,7 @@ def scrape_with_pagination_generic(soup, get_next_page_url, fetch_page_content, 
 
     while pages_scraped < max_pages:
         print("Calling extract_data...")
-        page_data = extract_data(soup)
+        page_data = extract_data(soup, url)
         print("Finished calling extract_data.")
         if page_data:
             all_data.extend(page_data)
@@ -189,17 +230,17 @@ def find_and_click_next_button(driver, max_attempts=12):
     try:
         # Define both XPath and CSS selectors for common "Next" button patterns
         next_button_selectors = [
+            "//a[contains(@class, 'next')]",
+            "//button[contains(@class, 'next')]",
             "//button[@aria-label='Goto next page']",
             "//button[@data-testid='next-page-button']",
             "//button[contains(@class, 'icon-btn')]",
             "//a[contains(text(), 'Next')]",
             "//a[contains(text(), 'next')]",
             "//a[contains(@aria-label, 'Next')]",
-            "//a[contains(@class, 'next')]",
             "//button[contains(text(), 'Next')]",
             "//button[contains(text(), 'next')]",
             "//button[contains(@aria-label, 'Next')]",
-            "//button[contains(@class, 'next')]",
             "//a[contains(@title, 'Next')]",
             "//a[contains(@role, 'button') and contains(text(), 'Next')]",
             "//a[@rel='next']",
@@ -273,15 +314,18 @@ def extract_data(driver, url, class_name=None):
     parsed_url = urlparse(url)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
-    # Check for next page button first
+    # Extract details from the first page
+    print("Extracting details from the first page...")
+    all_data = Extract_data_from_multi_links.extract_data_with_details(driver, soup, base_url)
+
+    # Check for the "Next Page" button and paginate if available
     if has_next_page_button(soup):
         print("Detected 'Next Page' button. Scraping with pagination.")
-        return scrape_with_pagination(driver, url, class_name)
-
-    # Fall back to extracting detailed data if no pagination
+        all_data.extend(scrape_with_pagination(driver, url, class_name, base_url))
     else:
-        print("No 'Next Page' button. Scraping current page with details.")
-        return Extract_data_from_multi_links.extract_data_with_details(driver, soup, base_url)
+        print("No 'Next Page' button. Only extracted data from the first page.")
+
+    return all_data
 
 
 def has_next_page_button(soup):

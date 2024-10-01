@@ -11,6 +11,35 @@ def extract_data_with_details(driver, soup, base_url):
     for element in soup.find_all(['header', 'aside', 'footer']):
         element.decompose()  # Remove <header> and <aside> and all their content
 
+    # Remove any element with class="footer"
+    for footer_element in soup.find_all(class_='footer'):
+        footer_element.decompose()  # Remove all elements with class="footer"
+
+    # Remove any element with class="pre-header"
+    for preheader_element in soup.find_all(class_='pre-header'):
+        preheader_element.decompose()  # Remove all elements with class="pre-header"
+
+    # Remove any element with class="fixed-header"
+    for fixed_header_element in soup.find_all(class_='fixed-header'):
+        fixed_header_element.decompose()  # Remove all elements with class="fixed-header"
+
+    # Remove any element with class="sidebar"
+    for sidebar_element in soup.find_all(class_='sidebar'):
+        sidebar_element.decompose()  # Remove all elements with class="sidebar"
+
+    # Remove any element with class="search-lst--top"
+    for search_top_element in soup.find_all(class_='search-lst--top'):
+        search_top_element.decompose()  # Remove all elements with class="search-lst--top"
+
+    # Remove any element with class="search-lst--filters"
+    for search_filters_element in soup.find_all(class_='search-lst--filters'):
+        search_filters_element.decompose()  # Remove all elements with class="search-lst--filters"
+
+    # Remove any element with id="SearchBanner"
+    search_banner_element = soup.find(id='SearchBanner')
+    if search_banner_element:
+        search_banner_element.decompose()  # Remove element with id="SearchBanner"
+
     # List to store extracted data
     extracted_data = []
 
@@ -43,7 +72,10 @@ def extract_from_anchor_tags(soup, base_url):
     # Iterate over all 'a' tags
     for a in soup.find_all('a'):
         href = a.get('data-uw-original-href') or a.get('href')
-        if href:  # Ensure it's a valid link
+        rel = a.get('rel', [])  # Get the 'rel' attribute, defaulting to an empty list if not present
+
+        # Filter out links with rel="nofollow"
+        if href and 'nofollow' not in rel:
             # Make the URL absolute if it's relative
             if href.startswith(('http://', 'https://')):
                 full_url = href
@@ -67,7 +99,7 @@ def extract_from_anchor_tags(soup, base_url):
                                                       "find out more"]:
                 continue
 
-            # Print the extracted URL and text
+            # Print the extracted URL and text (for debugging)
             print(f"Extracted URL: {full_url}, Text: {link_text}")
 
             # Store the link and its associated text
@@ -80,6 +112,7 @@ def extract_from_anchor_tags(soup, base_url):
             seen_links.add(full_url)
 
     return data
+
 
 
 def extract_relevant_text(anchor_tag):
