@@ -126,6 +126,7 @@ def scrape():
                     session.commit()
 
                     # save data to CSV file
+                    df.drop(['special_id', 'collected_at'], axis=1, inplace=True)
                     df.to_csv(csv_path, mode='w', index=False)
                     return send_file(csv_path, as_attachment=True)
                 else:
@@ -171,6 +172,7 @@ def scrape():
                     session.add(new_entry)
                 session.commit()
 
+                df.drop(['special_id', 'collected_at'], axis=1, inplace=True)
                 df.to_csv(csv_path, mode='w', index=False)
                 return send_file(csv_path, as_attachment=True)
             else:

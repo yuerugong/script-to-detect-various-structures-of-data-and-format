@@ -159,7 +159,7 @@ def scrape_with_pagination(driver, url, class_name, base_url):
     visited_content_hashes = set()
     pages_scraped = 0
 
-    while pages_scraped < 10:
+    while pages_scraped < 3:
         soup = BeautifulSoup(driver.page_source, 'html.parser')
         current_page_hash = hashlib.md5(soup.get_text().encode('utf-8')).hexdigest()
 
