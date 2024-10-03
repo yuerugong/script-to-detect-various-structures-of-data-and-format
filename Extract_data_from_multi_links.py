@@ -114,24 +114,6 @@ def extract_from_anchor_tags(soup, base_url):
     return data
 
 
-
-def extract_relevant_text(anchor_tag):
-    """
-    Extracts the most relevant and meaningful text from an anchor tag.
-    If the <a> tag itself does not have visible text, it tries to extract from nearby elements.
-    """
-    link_text = anchor_tag.get_text(strip=True)
-
-    # If <a> tag text is empty, try to find text from nearby <h1>, <h2>, <h3>, <p>, or <span> tags
-    if not link_text:
-        for sibling in anchor_tag.find_all_previous(['h1', 'h2', 'h3', 'h4'], limit=1):
-            link_text = sibling.get_text(strip=True)
-            if link_text:
-                break
-
-    return link_text
-
-
 def extract_bio_and_image(person_url):
     """
     Extracts the bio and image from an individual profile page, generalized to handle multiple webpage structures.
@@ -148,7 +130,7 @@ def extract_bio_and_image(person_url):
         bio = extract_bio_from_main_or_fallback(soup)
 
         # Extract the image from <main> or fallback to the global search
-        image = extract_image_from_main_or_fallback(soup, person_url)
+        image = extract_images_from_main_or_fallback(soup, person_url)
 
         return bio, image
 
@@ -159,70 +141,111 @@ def extract_bio_and_image(person_url):
 
 def extract_bio_from_main_or_fallback(soup):
     """
-    First checks for <main> tags or class="main" to search for bio information.
-    If no such tag or class is found, fallback to extracting text from <p> tags.
-    Removes any <span> and <form> tags and their content from the entire soup.
+    Extract bio information including name, job title, and phone numbers.
     """
     bio = ""
 
-    # First, globally remove all <form> and <span> tags before processing
+    # Remove any unnecessary elements globally before processing
     for form in soup.find_all('form'):
-        form.decompose()  # Completely remove all <form> tags and their content
-    for span in soup.find_all('span'):
-        span.decompose()  # Completely remove all <span> tags and their content
-    for span in soup.find_all('footer'):
-        span.decompose()  # Completely remove all <footer> tags and their content
+        form.decompose()
+    for footer_element in soup.find_all(class_='footer'):
+        footer_element.decompose()
+    for modal_fade in soup.find_all(class_='modal fade'):
+        modal_fade.decompose()
 
     # Try to find <main> tag or class="main"
     main_content = soup.find('main') or soup.find(class_='main')
 
     if main_content:
-        print("Found <main> tag or class='main'. Searching within the main content for bio...", flush=True)
         bio_paragraphs = main_content.find_all('p')
     else:
-        print("No <main> tag or class='main' found. Searching globally for bio...", flush=True)
         bio_paragraphs = soup.find_all('p')
 
     if bio_paragraphs:
         # Join the text from all <p> tags to form the full bio
-        bio = "\n".join([p.get_text(strip=True) for p in bio_paragraphs])
+        bio = "\n".join([p.get_text(separator="\n", strip=True) for p in bio_paragraphs])
 
-    return bio
+    # Extract additional bio information from other sections
+    name_tag = soup.find('div', class_='item--name')
+    if name_tag:
+        name = name_tag.find('a').get_text(strip=True)
+        bio += "\n" + name
+
+    # Extract job title and role
+    function_tag = soup.find('div', class_='item--function')
+    if function_tag:
+        function = function_tag.get_text(strip=True)
+        bio += "\n" + function
+
+    # Extract additional titles/roles (e.g., Production, Servicing)
+    title_tag = soup.find('div', class_='item--title')
+    if title_tag:
+        title = title_tag.get_text(strip=True)
+        bio += "\n" + title
+
+    # Extract phone numbers
+    phones_tag = soup.find('div', class_='item--phones')
+    if phones_tag:
+        tel_tag = phones_tag.find('div', class_='tel')
+        mobile_tag = phones_tag.find('div', class_='mobile')
+        if tel_tag:
+            bio += "\nTel: " + tel_tag.get_text(strip=True)
+        if mobile_tag:
+            bio += "\nMobile: " + mobile_tag.get_text(strip=True)
+
+    return bio.strip()
 
 
-def extract_image_from_main_or_fallback(soup, person_url):
+def extract_images_from_main_or_fallback(soup, person_url):
     """
-    First checks for <main> tags or class="main" to search for an image.
-    If no such tag or class is found, fallback to data-srcset, data-src, or src attributes.
+    Extracts all image URLs from the page.
+    Checks for images in <main> or globally, and collects 'src' attributes.
     """
-    image = ""
+    images = []
 
-    # Try to find <main> tag or class="main"
+    # Remove unnecessary elements
+    for footer_element in soup.find_all(class_='footer'):
+        footer_element.decompose()
+    for preheader_element in soup.find_all(class_='pre-header'):
+        preheader_element.decompose()
+    for fixed_header_element in soup.find_all(class_='fixed-header'):
+        fixed_header_element.decompose()
+    for sidebar_element in soup.find_all(class_='sidebar'):
+        sidebar_element.decompose()
+    for search_top_element in soup.find_all(class_='search-lst--top'):
+        search_top_element.decompose()
+    for search_filters_element in soup.find_all(class_='search-lst--filters'):
+        search_filters_element.decompose()
+
+    # Remove any element with id="SearchBanner"
+    search_banner_element = soup.find(id='SearchBanner')
+    if search_banner_element:
+        search_banner_element.decompose()
+
+    # Try to find all images in <main> or globally
     main_content = soup.find('main') or soup.find(class_='main')
 
     if main_content:
-        print("Found <main> tag or class='main'. Searching within the main content...", flush=True)
-        img_tag = main_content.find('img')
+        print("Found <main> tag or class='main'. Searching for images...", flush=True)
+        img_tags = main_content.find_all('img')
     else:
-        print("No <main> tag or class='main' found. Searching globally for the image...", flush=True)
-        img_tag = soup.find('img')
+        print("No <main> tag or class='main' found. Searching globally for images...", flush=True)
+        img_tags = soup.find_all('img')
 
-    if img_tag:
-        # Try to get the 'data-srcset' attribute first
-        srcset = img_tag.get('data-srcset')
-        if srcset:
-            # Extract all URLs and select the largest image (the last one in the list)
-            srcset_urls = [entry.split(" ")[0] for entry in srcset.split(",")]
-            image = srcset_urls[-1]
-        else:
-            # Fallback to 'data-src' or 'src'
-            image = img_tag.get('data-src') or img_tag.get('src')
+    # Iterate over all <img> tags and extract their 'src' attributes
+    for img_tag in img_tags:
+        # Try to get the 'src' attribute (Base64 image data or URL)
+        image = img_tag.get('src')
 
-        # If image src is relative, convert to absolute
-        if image:
+        # If image src is a relative URL, convert it to an absolute URL
+        if image and not image.startswith('data:'):
             image = urljoin(person_url, image)
 
-    return image
+        # Append the image link to the list
+        if image:
+            images.append(image)
+
+    return images
 
 
 def filter_content(data):
