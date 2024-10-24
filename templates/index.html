@@ -7,10 +7,22 @@
 <body>
     <h1>Enter a Website to Scrape</h1>
     <form action="/scrape" method="post">
-        <input type="text" name="url" placeholder="Enter website URL" required>
+        <label for="url">Website URL:</label>
+        <input type="text" id="url" name="url" placeholder="Enter website URL" required>
+        <br><br>
+
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" placeholder="Enter your email" required>
+        <br><br>
+
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" placeholder="Enter your password" required>
+        <br><br>
+
         <div id="class-input" style="display: none;">
             <input type="text" name="class_name" placeholder="Enter class name if required">
         </div>
+
         <input type="submit" value="Scrape">
     </form>
 
@@ -20,11 +32,12 @@
     <form action="/scrape" method="post">
         <input type="hidden" name="url" value="{{ request.form['url'] }}">
         <input type="hidden" name="class_name" value="{{ request.form.get('class_name') }}">
+        <input type="hidden" name="email" value="{{ request.form.get('email') }}">
+        <input type="hidden" name="password" value="{{ request.form.get('password') }}">
         <input type="hidden" name="rescrape" value="true">
         <input type="submit" value="Rescrape Data">
     </form>
     {% endif %}
-
 
     <h2>Existing Tables</h2>
     <table border="1">

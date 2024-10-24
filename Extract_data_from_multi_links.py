@@ -149,6 +149,7 @@ def extract_bio_from_main_or_fallback(soup):
     for modal_fade in soup.find_all(class_='modal fade'):
         modal_fade.decompose()
 
+
     # Try to find <main> or elements with class="main"
     main_content = soup.find('main') or soup.find(class_='main')
 
@@ -165,6 +166,15 @@ def extract_bio_from_main_or_fallback(soup):
             print(paragraph_text)  # Print extracted <p> tag content for debugging
             bio += "\n" + paragraph_text
             seen_texts.add(paragraph_text)  # Mark this text as seen
+
+        # 进一步处理 <span> 标签
+        span_elements = paragraph.find_all('span')
+        for span in span_elements:
+            span_text = span.get_text(strip=True)
+            if span_text not in seen_texts:
+                print(span_text)  # 打印提取的 <span> 内容以调试
+                bio += "\n" + span_text
+                seen_texts.add(span_text)  # 标记这个文本已被处理
 
     # Extract <li> tags directly, skipping <ul> and avoiding duplicates
     li_elements = soup.find_all('li')
@@ -215,10 +225,6 @@ def extract_bio_from_main_or_fallback(soup):
                 seen_texts.add(mobile_text)
 
     return bio.strip()
-
-
-
-
 
 
 def extract_images_from_main_or_fallback(soup, person_url):

@@ -1,6 +1,5 @@
 from flask import Flask, request, render_template, send_file, jsonify, redirect, url_for
 import pandas as pd
-import main2
 import os
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, String, Integer, Table, MetaData, DateTime
@@ -8,7 +7,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 import hashlib
 from sqlalchemy import inspect
-
+import cinando  # Import cinando.py for scraping functions
+import shutil
 
 app = Flask(__name__)
 
@@ -18,6 +18,7 @@ Session = sessionmaker(bind=engine)
 session = Session()
 metadata = MetaData(bind=engine)
 metadata.bind = engine
+
 
 class Directory(Base):
     __tablename__ = 'directory'
@@ -37,46 +38,35 @@ def create_dynamic_table(table_name, df_columns):
     including special_id and collected_at.
     """
     try:
-        # Reflect the current state of the database
         inspector = inspect(engine)
         existing_tables = inspector.get_table_names()
 
         if table_name not in existing_tables:
-            # If the table does not exist, create it with all columns and additional fields
             columns = [Column('id', Integer, primary_key=True)]
             for col in df_columns:
                 columns.append(Column(col, String))
-            # Add fixed columns special_id and collected_at
             columns.append(Column('special_id', String))
             columns.append(Column('collected_at', DateTime))
             new_table = Table(table_name, metadata, *columns)
             metadata.create_all(engine)
             print(f"Table '{table_name}' created successfully.")
         else:
-            # If the table exists, check if each column needs to be added
             existing_columns = [col['name'] for col in inspector.get_columns(table_name)]
-
-            # Add missing columns to the existing table
             for col in df_columns:
                 if col not in existing_columns:
                     with engine.connect() as conn:
                         conn.execute(f'ALTER TABLE {table_name} ADD COLUMN "{col}" TEXT')
                     print(f"Column '{col}' added to table '{table_name}'.")
-
-            # Ensure 'special_id' and 'collected_at' columns exist
             if 'special_id' not in existing_columns:
                 with engine.connect() as conn:
                     conn.execute(f'ALTER TABLE {table_name} ADD COLUMN "special_id" TEXT')
                 print(f"Column 'special_id' added to table '{table_name}'.")
-
             if 'collected_at' not in existing_columns:
                 with engine.connect() as conn:
                     conn.execute(f'ALTER TABLE {table_name} ADD COLUMN "collected_at" DATETIME')
                 print(f"Column 'collected_at' added to table '{table_name}'.")
-
     except Exception as e:
         print(f"Error in create_dynamic_table: {e}")
-
 
 
 def generate_table_name(url):
@@ -95,7 +85,8 @@ def scrape():
         return redirect(url_for('index'))
 
     url = request.form['url']
-    class_name = request.form.get('class_name')
+    email = request.form['email']  # Add email input
+    password = request.form['password']  # Add password input
     rescrape = request.form.get('rescrape', 'false').lower() == 'true'
     existing_entry = session.query(Directory).filter_by(url=url).first()
 
@@ -104,35 +95,21 @@ def scrape():
         csv_path = f'{table_name}.csv'
         try:
             print(f"Rescraping URL: {url}")
-            data = main2.scrape_with_fallback(url, class_name)
+            # Step 1: Use api_login_and_scrape to fetch company details
+            cinando.api_login_and_scrape(url, email, password)  # Fetch data and save to 'details'
 
-            if data:
-                print("Data collected successfully")
-                if isinstance(data, (list, dict)):
-                    df = pd.DataFrame(data)
-                    for col in df.columns:
-                        df[col] = df[col].apply(lambda x: str(x) if isinstance(x, list) else x)
+            # Step 2: Extract bio and image from fetched HTML files
+            cinando.extract_bio_and_image_from_html('details', f'{table_name}.csv')
+            df = pd.read_csv(f'{table_name}.csv')
+            df = process_dataframe(df, table_name)
 
-                    create_dynamic_table(table_name, df.columns)
+            # Save the data to a CSV file
+            df.to_csv(csv_path, mode='w', index=False)
 
-                    special_id = f"{table_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    df['special_id'] = special_id
-                    df['collected_at'] = datetime.now()
+            # Delete the 'details' directory after generating CSV
+            shutil.rmtree('details', ignore_errors=True)
 
-                    df.to_sql(table_name, con=engine, index=False, if_exists='append')
-
-                    existing_entry.last_collected = datetime.now()
-                    existing_entry.special_id = special_id
-                    session.commit()
-
-                    # save data to CSV file
-                    df.drop(['special_id', 'collected_at'], axis=1, inplace=True)
-                    df.to_csv(csv_path, mode='w', index=False)
-                    return send_file(csv_path, as_attachment=True)
-                else:
-                    return jsonify({"error": "Collected data is not in a proper format for a DataFrame."})
-            else:
-                return render_template('index.html', error="Failed to collect data. Please provide a class name if required.")
+            return send_file(csv_path, as_attachment=True)
         except Exception as e:
             session.rollback()
             return jsonify({"error": str(e)})
@@ -147,47 +124,61 @@ def scrape():
 
     try:
         print(f"Scraping URL: {url}")
-        data = main2.scrape_with_fallback(url, class_name)
+        # Step 1: Use api_login_and_scrape to fetch company details
+        cinando.api_login_and_scrape(url, email, password)  # Fetch data and save to 'details'
 
-        if data:
-            print("Data collected successfully")
-            if isinstance(data, (list, dict)):
-                df = pd.DataFrame(data)
-                for col in df.columns:
-                    df[col] = df[col].apply(lambda x: str(x) if isinstance(x, list) else x)
+        # Step 2: Extract bio and image from fetched HTML files
+        cinando.extract_bio_and_image_from_html('details', f'{table_name}.csv')
+        df = pd.read_csv(f'{table_name}.csv')
+        df = process_dataframe(df, table_name)
 
-                create_dynamic_table(table_name, df.columns)
+        # Save the data to a CSV file
+        df.to_csv(csv_path, mode='w', index=False)
 
-                special_id = f"{table_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                df['special_id'] = special_id
-                df['collected_at'] = datetime.now()
-
-                df.to_sql(table_name, con=engine, index=False, if_exists='append')
-
-                if existing_entry:
-                    existing_entry.last_collected = datetime.now()
-                    existing_entry.special_id = special_id
-                else:
-                    new_entry = Directory(url=url, table_name=table_name, last_collected=datetime.now(), special_id=special_id)
-                    session.add(new_entry)
-                session.commit()
-
-                df.drop(['special_id', 'collected_at'], axis=1, inplace=True)
-                df.to_csv(csv_path, mode='w', index=False)
-                return send_file(csv_path, as_attachment=True)
-            else:
-                return jsonify({"error": "Collected data is not in a proper format for a DataFrame."})
+        # **Insert or update the URL information in the database**
+        if existing_entry:
+            existing_entry.last_collected = datetime.now()
+            session.commit()
         else:
-            return render_template('index.html', error="Failed to collect data. Please provide a class name if required.")
+            new_entry = Directory(
+                url=url,
+                table_name=table_name,
+                last_collected=datetime.now(),
+                special_id=f"{table_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            )
+            session.add(new_entry)
+            session.commit()
+
+        # Delete the 'details' directory after generating CSV
+        shutil.rmtree('details', ignore_errors=True)
+
+        return send_file(csv_path, as_attachment=True)
     except Exception as e:
         session.rollback()
         return jsonify({"error": str(e)})
 
 
+def process_dataframe(df, table_name):
+    """
+    Process the DataFrame by adding special_id and collected_at, then store in database.
+    """
+    for col in df.columns:
+        df[col] = df[col].apply(lambda x: str(x) if isinstance(x, list) else x)
+
+    create_dynamic_table(table_name, df.columns)
+
+    special_id = f"{table_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    df['special_id'] = special_id
+    df['collected_at'] = datetime.now()
+
+    df.to_sql(table_name, con=engine, index=False, if_exists='append')
+
+    return df
+
+
 @app.route('/download_latest/<table_name>', methods=['GET'])
 def download_latest(table_name):
     try:
-        # Read the latest data in the database
         df = pd.read_sql_table(table_name, con=engine)
         latest_csv_path = f'{table_name}_latest.csv'
         df.to_csv(latest_csv_path, mode='w', index=False)
