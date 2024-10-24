@@ -1,10 +1,9 @@
 import os
-import re
-import json
 import time
 import requests
 from bs4 import BeautifulSoup
 import csv
+
 
 def api_login_and_scrape(url, email, password, max_page=1):
     """
@@ -150,7 +149,8 @@ def api_login_and_scrape(url, email, password, max_page=1):
                                 detail_url = f"https://cinando.com{detail_link}"
                                 detail_headers = headers.copy()
                                 detail_headers.update({
-                                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,'
+                                              'image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                                     'Upgrade-Insecure-Requests': '1',
                                 })
 
@@ -194,10 +194,6 @@ def api_login_and_scrape(url, email, password, max_page=1):
         print("Login failed")
 
 
-import os
-import csv
-from bs4 import BeautifulSoup
-
 def extract_bio_and_image_from_html(directory, output_csv):
     """
     Extract bio and image information from HTML files in the specified directory and save to a CSV file.
@@ -220,35 +216,36 @@ def extract_bio_and_image_from_html(directory, output_csv):
                         # Extract bio information
                         bio_parts = []
 
-                        # Extract address information (more comprehensive)
-                        address_div = page_entity_div.find('div', class_='address')
-                        if address_div:
-                            # Extract all text within the address div, including any nested tags
-                            address_text = address_div.get_text(separator=' ', strip=True)
-                            bio_parts.append(address_text)
-
                         # Extract time information
                         time_info_div = soup.find('div', class_='cover__info--cover--clock')
                         if time_info_div:
                             bio_parts.append(time_info_div.get_text(strip=True))
 
-                        # Extract contact links
-                        links_div = soup.find('div', class_='links')
-                        if links_div:
-                            for link in links_div.find_all('a'):
-                                bio_parts.append(link.get_text(strip=True))
-
-                        # Extract content information while ignoring address parts
+                        # Extract all the content in the content
                         content_div = soup.find('div', class_='content')
                         if content_div:
-                            # Extract all text within content_div, excluding elements that are within address divs
                             content_text_parts = []
                             for element in content_div.find_all(recursive=False):
-                                if not element.find_parent('div', class_='address'):
-                                    content_text_parts.append(element.get_text(strip=True))
+                                element_text = element.get_text(strip=True)
+                                if element_text:
+                                    content_text_parts.append(element_text)
                             content_text = ' '.join(content_text_parts)
-                            if content_text:
+                            if content_text and content_text not in bio_parts:
                                 bio_parts.append(content_text)
+
+                        # Extract festival & awards information (for film)
+                        award_items_div = soup.find('div', class_='award--items')
+                        if award_items_div:
+                            for item_div in award_items_div.find_all('div', class_='item'):
+                                title_div = item_div.find('div', class_='item--title')
+                                content_div = item_div.find('div', class_='item--content')
+
+                                title_text = title_div.get_text(strip=True) if title_div else None
+
+                                content_text = content_div.get_text(strip=True) if content_div else ''
+
+                                if title_text:
+                                    bio_parts.append(f"{title_text}: {content_text}")
 
                         # Extract tab-content information (ignore if not found)
                         tab_content_div = soup.find('div', class_='tab-content')
@@ -264,16 +261,19 @@ def extract_bio_and_image_from_html(directory, output_csv):
                                             if len(labels) >= 2:
                                                 key = labels[0].get_text(strip=True)
                                                 value = labels[1].get_text(strip=True)
-                                                bio_parts.append(f"{key}: {value}")
+                                                if key and value:
+                                                    bio_parts.append(f"{key}: {value}")
 
                         # Extract other bio information
                         for tag in page_entity_div.find_all(['p']):
                             if tag.find_parent('div', class_=['address', 'content', 'links', 'tab-content', 'cover__info--cover--clock']):
                                 continue
-                            bio_parts.append(tag.get_text(strip=True))
+                            tag_text = tag.get_text(strip=True)
+                            if tag_text and tag_text not in bio_parts:
+                                bio_parts.append(tag_text)
 
-                        # Combine bio parts
-                        bio = ' '.join(bio_parts) if bio_parts else 'No bio available'
+                        # Combine bio parts and remove duplicates
+                        bio = ' '.join(set(bio_parts)) if bio_parts else 'No bio available'
 
                         # Extract image information
                         image_tag = page_entity_div.find('img')
@@ -296,13 +296,6 @@ def extract_bio_and_image_from_html(directory, output_csv):
 
     print(f"Successfully extracted bio and image URL for {len(entity_data)} entities and saved to {output_csv}.")
 
-
-
-# test
-#email = "davidmoreno@72dragons.com"
-#password = "DrDragon72!"
-
-#api_login_and_scrape("https://cinando.com/en/Film/SearchPostgres", email, password, max_page=1)
 
 # https://cinando.com/en/Film/SearchPostgres
 # https://cinando.com/en/People/Search
