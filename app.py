@@ -2,13 +2,15 @@ from flask import Flask, request, render_template, send_file, jsonify, redirect,
 import pandas as pd
 import os
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine, Column, String, Integer, Table, MetaData, DateTime
+from sqlalchemy import create_engine, Column, String, Integer, Table, MetaData, DateTime, Boolean
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 import hashlib
-from sqlalchemy import inspect
 import cinando  # Import cinando.py for scraping functions
 import shutil
+from sqlalchemy import create_engine, inspect
+from datetime import datetime
+import pandas as pd
 
 app = Flask(__name__)
 
@@ -27,6 +29,9 @@ class Directory(Base):
     table_name = Column(String)
     last_collected = Column(DateTime)
     special_id = Column(String)
+    auto_collect = Column(Boolean, default=False)
+    email = Column(String)
+    password = Column(String)
 
 
 Base.metadata.create_all(engine)
@@ -88,6 +93,7 @@ def scrape():
     email = request.form['email']  # Add email input
     password = request.form['password']  # Add password input
     rescrape = request.form.get('rescrape', 'false').lower() == 'true'
+    auto_collect = request.form.get('auto_collect', 'false') == 'on'
     existing_entry = session.query(Directory).filter_by(url=url).first()
 
     if existing_entry and rescrape:
@@ -117,7 +123,8 @@ def scrape():
     if existing_entry and not rescrape:
         one_week_ago = datetime.now() - timedelta(weeks=1)
         if existing_entry.last_collected > one_week_ago:
-            return render_template('index.html', prompt_existing_data=True, last_collected=existing_entry.last_collected, table_name=existing_entry.table_name)
+            return render_template('index.html', prompt_existing_data=True,
+                                   last_collected=existing_entry.last_collected, table_name=existing_entry.table_name)
 
     table_name = existing_entry.table_name if existing_entry else generate_table_name(url)
     csv_path = f'{table_name}.csv'
@@ -138,13 +145,17 @@ def scrape():
         # **Insert or update the URL information in the database**
         if existing_entry:
             existing_entry.last_collected = datetime.now()
+            existing_entry.auto_collect = auto_collect
             session.commit()
         else:
             new_entry = Directory(
                 url=url,
                 table_name=table_name,
                 last_collected=datetime.now(),
-                special_id=f"{table_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                special_id=f"{table_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                email=email,
+                password=password,
+                auto_collect=auto_collect
             )
             session.add(new_entry)
             session.commit()
@@ -160,17 +171,44 @@ def scrape():
 
 def process_dataframe(df, table_name):
     """
-    Process the DataFrame by adding special_id and collected_at, then store in database.
+    Process the DataFrame by adding a special_id and collected_at columns, storing in the database.
+    It checks for new and modified rows.
     """
+    # Convert list-type columns to string (for uniform storage in the database)
     for col in df.columns:
         df[col] = df[col].apply(lambda x: str(x) if isinstance(x, list) else x)
 
-    create_dynamic_table(table_name, df.columns)
-
+    # Generate a unique identifier for this collection
     special_id = f"{table_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     df['special_id'] = special_id
     df['collected_at'] = datetime.now()
 
+    # Fetch existing data to identify new or modified rows
+    existing_data = pd.read_sql_table(table_name, con=engine) if inspect(engine).has_table(
+        table_name) else pd.DataFrame()
+
+    # Find new rows
+    if not existing_data.empty:
+        merged_data = df.merge(existing_data, on='id', how='left', suffixes=('', '_existing'), indicator=True)
+        new_rows = merged_data[merged_data['_merge'] == 'left_only'].drop(columns=existing_data.columns)
+        modified_rows = merged_data[(merged_data['_merge'] == 'both') &
+                                    (merged_data.apply(lambda row: any(row[col] != row[col + '_existing']
+                                                                       for col in df.columns if col != 'id'), axis=1))]
+    else:
+        # If no existing data, all rows are new
+        new_rows = df.copy()
+        modified_rows = pd.DataFrame()
+
+    # Mark status of rows
+    if not new_rows.empty:
+        new_rows['status'] = 'new'
+        new_rows.to_sql(table_name, con=engine, index=False, if_exists='append')
+
+    if not modified_rows.empty:
+        modified_rows['status'] = 'modified'
+        modified_rows.to_sql(table_name, con=engine, index=False, if_exists='append')
+
+    # Save the latest collected data
     df.to_sql(table_name, con=engine, index=False, if_exists='append')
 
     return df
@@ -215,6 +253,26 @@ def delete_table(table_name):
         return jsonify({"error": str(e)})
 
 
+def auto_collect_data():
+    links_to_collect = session.query(Directory).filter_by(auto_collect=True).all()
+    for entry in links_to_collect:
+        try:
+            print(f"Automatically scraping URL: {entry.url}")
+            cinando.api_login_and_scrape(entry.url, entry.email, entry.password)
+            cinando.extract_bio_and_image_from_html('details', f'{entry.table_name}.csv')
+            df = pd.read_csv(f'{entry.table_name}.csv')
+            process_dataframe(df, entry.table_name)
+            entry.last_collected = datetime.now()
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Error in auto_collect_data for {entry.url}: {e}")
+
+
 if __name__ == '__main__':
-    print("Starting Flask app...")
-    app.run(debug=True)
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == 'auto_collect_data':
+        auto_collect_data()
+    else:
+        print("Starting Flask app...")
+        app.run(debug=True)
