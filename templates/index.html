@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Web Scraper</title>
+    <title>Web Scraper with Crontab Management</title>
+    <script>
+        function toggleCollectionPeriod() {
+            const autoCollect = document.getElementById("auto_collect");
+            const collectionPeriod = document.getElementById("collection_period");
+            collectionPeriod.disabled = !autoCollect.checked;
+        }
+    </script>
 </head>
 <body>
     <h1>Enter a Website to Scrape</h1>
@@ -21,42 +28,52 @@
 
         <!-- Add auto_collect checkbox -->
         <label for="auto_collect">Enable Auto Collection:</label>
-        <input type="checkbox" id="auto_collect" name="auto_collect">
+        <input type="checkbox" id="auto_collect" name="auto_collect" onclick="toggleCollectionPeriod()">
+        <br><br>
+
+        <!-- Add collection period dropdown -->
+        <label for="collection_period">Collection Period:</label>
+        <select id="collection_period" name="collection_period" disabled>
+            <option value="none">None</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+        </select>
         <br><br>
 
         <input type="submit" value="Scrape">
     </form>
 
-    {% if prompt_existing_data %}
-    <p>The URL has been scraped within the last week (Last collected: {{ last_collected }}). What would you like to do?</p>
-    <a href="{{ url_for('download_latest', table_name=table_name) }}">Download Latest Data</a>
-    <form action="/scrape" method="post">
-        <input type="hidden" name="url" value="{{ request.form['url'] }}">
-        <input type="hidden" name="class_name" value="{{ request.form.get('class_name') }}">
-        <input type="hidden" name="email" value="{{ request.form.get('email') }}">
-        <input type="hidden" name="password" value="{{ request.form.get('password') }}">
-        <input type="hidden" name="rescrape" value="true">
-        <input type="submit" value="Rescrape Data">
-    </form>
-    {% endif %}
-
-    <h2>Existing Tables</h2>
+    <h2>Existing Crontab Processes</h2>
     <table border="1">
         <thead>
             <tr>
-                <th>URL</th>
-                <th>Table Name</th>
+                <th>ID</th>
+                <th>Command</th>
+                <th>Period</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
-            {% for table in tables_info %}
+            {% for task in cron_tasks %}
             <tr>
-                <td>{{ table.url }}</td>
-                <td>{{ table.table_name }}</td>
+                <td>{{ loop.index }}</td>
+                <td>{{ task.command }}</td>
+                <td>{{ task.period }}</td>
                 <td>
-                    <a href="{{ url_for('view_table', table_name=table.table_name) }}">View Data</a> |
-                    <a href="{{ url_for('delete_table', table_name=table.table_name) }}" onclick="return confirm('Are you sure you want to delete this table?')">Delete</a>
+                    <form action="/delete_cron" method="post" style="display:inline;">
+                        <input type="hidden" name="task_id" value="{{ loop.index }}">
+                        <input type="submit" value="Delete" onclick="return confirm('Are you sure you want to delete this task?')">
+                    </form>
+                    <form action="/update_cron" method="post" style="display:inline;">
+                        <input type="hidden" name="task_id" value="{{ loop.index }}">
+                        <select name="new_period">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                        <input type="submit" value="Update">
+                    </form>
                 </td>
             </tr>
             {% endfor %}
