@@ -57,6 +57,7 @@ def scrape():
         cinando.api_login_and_scrape(url, email, password)
         cinando.extract_bio_and_image_from_html('details', f'{table_name}.csv')
         df = pd.read_csv(f'{table_name}.csv')
+        df['url'] = url  # 添加URL列以便追踪
         df = process_dataframe(df, table_name)
         df.to_csv(csv_path, mode='w', index=False)
         shutil.rmtree('details', ignore_errors=True)
@@ -89,6 +90,7 @@ def scrape():
     return send_file(csv_path, as_attachment=True)
 
 
+
 @app.route('/delete_cron', methods=['POST'])
 def delete_cron():
     task_id = int(request.form['task_id'])
@@ -107,11 +109,23 @@ def update_cron():
 def list_crontab_tasks():
     result = subprocess.run(['crontab', '-l'], capture_output=True, text=True)
     tasks = []
+    tables_info = session.query(Directory).all()
+    url_mapping = {entry.url: entry.url for entry in tables_info}
+
     for line in result.stdout.splitlines():
         if not line.startswith('#') and line.strip():
             cron_info = parse_cron_line(line)
             if cron_info:
+                command_parts = cron_info['command'].split()
+                url = None
+                for i, part in enumerate(command_parts):
+                    if part == '--url':
+                        url = command_parts[i + 1]
+                        break
+
+                cron_info['url'] = url_mapping.get(url, 'Unknown')  # 使用提取的URL
                 tasks.append(cron_info)
+
     return tasks
 
 
