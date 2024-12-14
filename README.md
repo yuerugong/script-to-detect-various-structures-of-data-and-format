@@ -10,7 +10,7 @@
 ### 2. `cinando.py`  
 #### Function:  
 `cinando.py` is designed to work with the following **three Cinando-related websites** to extract the **bio information** and **image link** from each detail page:  
-- [Cinando Film Search](https://cinando.com/en/Film/SearchPostgres)  
+- [Cinando Film Search](https://cinando.com/en/Search/Films)  
 - [Cinando People Search](https://cinando.com/en/People/Search)  
 - [Cinando Company Search](https://cinando.com/en/Company/Search)
 
@@ -21,7 +21,7 @@
 
 ### 3. `Cinando_IMDB_film.py` and `selenium_search.py`  
 #### Function:  
-This is a **two-part script** targeting the **[Cinando Film Search](https://cinando.com/en/Film/SearchPostgres)** website:  
+This is a **two-part script** targeting the **[Cinando Film Search](https://cinando.com/en/Search/Films)** website:  
 - **Step 1**: Run `Cinando_IMDB_film.py` to fetch each film's **bio information** and **image link**.  
 - **Step 2**: Use the output of `Cinando_IMDB_film.py` as input for `selenium_search.py` to retrieve **IMDb information** as well as **Facebook (FB)** and **Instagram (Ins)** links.  
 
@@ -40,4 +40,3 @@ The final output is saved in a CSV file named `collected_data_3.csv`.
 
 ## Notes for Usage  
 - Before running the scripts, ensure that all necessary dependencies (e.g., `selenium`, `requests`) are installed.  
-- Use the scripts responsibly, comply with the target website's terms of use, and control the request frequency to avoid triggering anti-scraping mechanisms.
