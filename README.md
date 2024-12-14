@@ -11,8 +11,8 @@
 #### Function:  
 `cinando.py` is designed to work with the following **three Cinando-related websites** to extract the **bio information** and **image link** from each detail page:  
 - [Cinando Film Search](https://cinando.com/en/Search/Films)  
-- [Cinando People Search](https://cinando.com/en/People/Search)  
-- [Cinando Company Search](https://cinando.com/en/Company/Search)
+- [Cinando People Search](https://cinando.com/en/Search/People)  
+- [Cinando Company Search](https://cinando.com/en/Search/Companies)
 
 #### Usage:  
 - The script can be used in combination with `app.py` to interact with a local web interface for data scraping operations.
@@ -32,7 +32,7 @@ The final output is saved in a CSV file named `collected_data_3.csv`.
 
 ### 4. `Cinando_IMDB_film_company.py`  
 #### Function:  
-`Cinando_IMDB_film_company.py` is specifically designed for the **[Cinando Company Search](https://cinando.com/en/Company/Search)** website.  
+`Cinando_IMDB_film_company.py` is specifically designed for the **[Cinando Company Search](https://cinando.com/en/Search/Companies)** website.  
 - It extracts each company's **bio information** and **image link**.  
 - Additionally, it retrieves the company's **official website link** along with **Facebook (FB)** and **Instagram (Ins)** links.
 
