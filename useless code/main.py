@@ -11,9 +11,7 @@ import asyncio
 import httpx
 import hashlib
 import re
-from urllib.parse import urlparse, urljoin
-import Extract_data_from_url
-import Extract_data_from_list
+from urllib.parse import urlparse
 import Extract_data_from_multi_links
 
 ###  Main  ###
